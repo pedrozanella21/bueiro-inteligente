@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bueiro Inteligente</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; }
+    header { padding: 16px 20px; border-bottom: 1px solid #1e293b; }
+    header h1 { font-size: 1.3rem; }
+    header p { color: #94a3b8; font-size: 0.9rem; margin-top: 4px; }
+    .resumo { display: flex; gap: 10px; padding: 12px 20px; flex-wrap: wrap; }
+    .chip { padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 0.85rem; }
+    .ok { background: #14532d; color: #bbf7d0; }
+    .atencao { background: #713f12; color: #fde68a; }
+    .critico { background: #7f1d1d; color: #fecaca; }
+    main { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 0 20px 20px; }
+    #mapa { height: 70vh; border-radius: 12px; }
+    .lista { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; }
+    .item { background: #1e293b; border-radius: 10px; padding: 12px; border-left: 5px solid; }
+    .item h3 { font-size: 0.95rem; }
+    .barra { height: 8px; background: #334155; border-radius: 4px; margin: 8px 0; overflow: hidden; }
+    .barra div { height: 100%; transition: width 0.5s; }
+    .linha { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #94a3b8; }
+    button { background: #38bdf8; color: #0f172a; border: none; border-radius: 6px; padding: 5px 10px; font-weight: 700; cursor: pointer; }
+    @media (max-width: 800px) {
+      main { grid-template-columns: 1fr; }
+      #mapa { height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Bueiro Inteligente · Curitiba</h1>
+    <p>Protótipo: sensores simulados medem o quanto cada grade de bueiro está obstruída.</p>
+  </header>
+
+  <div class="resumo" id="resumo"></div>
+
+  <main>
+    <div id="mapa"></div>
+    <div class="lista" id="lista"></div>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Pontos de exemplo em Curitiba (localização aproximada)
+    const bueiros = [
+      { nome: 'Rua XV de Novembro', lat: -25.4296, lng: -49.2713 },
+      { nome: 'Praça Tiradentes', lat: -25.4284, lng: -49.2711 },
+      { nome: 'Av. Manoel Ribas (Santa Felicidade)', lat: -25.4040, lng: -49.3290 },
+      { nome: 'Rua Mateus Leme', lat: -25.4170, lng: -49.2730 },
+      { nome: 'Av. Sete de Setembro', lat: -25.4395, lng: -49.2760 },
+      { nome: 'Av. República Argentina', lat: -25.4560, lng: -49.2900 },
+      { nome: 'Rua Marechal Deodoro', lat: -25.4320, lng: -49.2660 },
+      { nome: 'Av. Batel', lat: -25.4425, lng: -49.2890 },
+    ].map((b, i) => ({ ...b, id: i, nivel: Math.floor(Math.random() * 60) }));
+
+    const CORES = { ok: '#22c55e', atencao: '#eab308', critico: '#ef4444' };
+
+    function situacao(nivel) {
+      if (nivel >= 80) return 'critico';
+      if (nivel >= 50) return 'atencao';
+      return 'ok';
+    }
+
+    const mapa = L.map('mapa').setView([-25.43, -49.29], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(mapa);
+
+    bueiros.forEach((b) => {
+      b.marcador = L.circleMarker([b.lat, b.lng], { radius: 10, weight: 2, fillOpacity: 0.85 }).addTo(mapa);
+    });
+
+    function limpar(id) {
+      bueiros[id].nivel = 0;
+      atualizarTela();
+    }
+
+    function atualizarTela() {
+      const contagem = { ok: 0, atencao: 0, critico: 0 };
+      const lista = document.getElementById('lista');
+      lista.innerHTML = '';
+
+      [...bueiros].sort((a, b) => b.nivel - a.nivel).forEach((b) => {
+        const s = situacao(b.nivel);
+        contagem[s]++;
+        b.marcador.setStyle({ color: CORES[s], fillColor: CORES[s] });
+        b.marcador.bindPopup(`<b>${b.nome}</b><br>Obstrução: ${b.nivel}%`);
+
+        const item = document.createElement('div');
+        item.className = 'item';
+        item.style.borderColor = CORES[s];
+        item.innerHTML = `
+          <h3>${b.nome}</h3>
+          <div class="barra"><div style="width:${b.nivel}%;background:${CORES[s]}"></div></div>
+          <div class="linha"><span>${b.nivel}% obstruído</span></div>`;
+        if (s !== 'ok') {
+          const botao = document.createElement('button');
+          botao.textContent = 'Marcar como limpo';
+          botao.onclick = () => limpar(b.id);
+          item.querySelector('.linha').appendChild(botao);
+        }
+        lista.appendChild(item);
+      });
+
+      document.getElementById('resumo').innerHTML = `
+        <span class="chip ok">${contagem.ok} ok</span>
+        <span class="chip atencao">${contagem.atencao} atenção</span>
+        <span class="chip critico">${contagem.critico} crítico</span>`;
+    }
+
+    // Simula a leitura dos sensores: folhas e lixo vão se acumulando
+    function lerSensores() {
+      bueiros.forEach((b) => {
+        b.nivel = Math.min(100, b.nivel + Math.floor(Math.random() * 6));
+      });
+      atualizarTela();
+    }
+
+    atualizarTela();
+    setInterval(lerSensores, 3000);
+  </script>
+</body>
+</html>
